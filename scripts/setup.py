@@ -9,11 +9,22 @@ logging.basicConfig(level=logging.DEBUG)
 
 GIT_URI = "git://github.com/rconradharris/dotconfigs.git"
 class GitRepo(object):
-    def __init__(self, uri):
+    def __init__(self, uri, os_flavor):
         self.uri = uri
         self.basename = os.path.basename(self.uri)
         self.path = os.path.join(os.path.abspath(os.getcwd()), self.basename)
-    
+        self.os_flavor = os_flavor
+
+    def install(self, pkg="git-core"):
+        if self.os_flavor == 'debian':
+            logging.debug("installing '%s'" % pkg)
+            os.system("sudo apt-get install -y %s" % pkg)
+        elif self.os_flavor == 'mac':
+            pass
+        else:
+            raise NotImplementedError(
+              "unsupported os flavor: '%s'" % self.os_flavor)
+
     def clone(self):
         logging.debug("cloning git repo '%s'" % self.uri)
         os.system("git clone %s %s" % (self.uri, self.basename))
@@ -34,6 +45,7 @@ class GitRepo(object):
         """ Activated when used in the with statement. 
             Should automatically acquire a lock to be used in the with block.
         """
+        self.install()
         self.clone()
         self.pull()
         return self
@@ -65,6 +77,12 @@ def parse_args():
     parser.add_option("-n", "--undo",
                       action="store_true", dest="undo", default=False,
                       help="reverse specified operaions")
+    parser.add_option("-o", "--os-flavor",
+                      action="store", dest="os_flavor", default='debian',
+                      help="os of the host system (debian|mac)")
+    parser.add_option("--quick-start",
+                      action="store_true", dest="quick_start", default=False,
+                      help="basic for bootstapping a system")
 
     options, args = parser.parse_args()
     if len(args) < 2:
@@ -132,14 +150,21 @@ def add_gitconfig(git_repo, undo=False):
     src_name = '%s-%s' % (dst_name, mode)
     return add_dotfile(git_repo, src_name, dst_name, undo=options.undo)
 
+def quick_start(git_repo, undo=False):
+    add_vimrc(git_repo, undo=options.undo)
+    add_gitconfig(git_repo, undo=options.undo)
+
 options, args = None, None
 the_user = mode = None
 if __name__ == "__main__":
     options, args = parse_args()
     mode, the_user = args
-    with GitRepo(GIT_URI) as git_repo:
-        if options.add_vimrc:
-            add_vimrc(git_repo, undo=options.undo)
-        if options.add_gitconfig:
-            add_gitconfig(git_repo, undo=options.undo)
+    with GitRepo(GIT_URI, os_flavor=options.os_flavor) as git_repo:
+        if options.quick_start:
+            quick_start(git_repo, undo=options)
+        else:
+          if options.add_vimrc:
+              add_vimrc(git_repo, undo=options.undo)
+          if options.add_gitconfig:
+              add_gitconfig(git_repo, undo=options.undo)
 
