@@ -7,28 +7,35 @@ import optparse
 
 logging.basicConfig(level=logging.DEBUG)
 
-#user = "rick"
-user = "richardharris"
-git_uri = "git://github.com/rconradharris/dotconfigs.git"
-
+GIT_URI = "git://github.com/rconradharris/dotconfigs.git"
 class GitRepo(object):
     def __init__(self, uri):
         self.uri = uri
         self.basename = os.path.basename(self.uri)
         self.path = os.path.join(os.path.abspath(os.getcwd()), self.basename)
     
-    def clone_repo(self):
+    def clone(self):
         logging.debug("cloning git repo '%s'" % self.uri)
         os.system("git clone %s %s" % (self.uri, self.basename))
 
-    def make_path(self, path):
-        return os.path.join(self.path, path)
+    def pull(self, remote='origin', branch='master'):
+        logging.debug("pulling branch '%s' from '%s'" % (branch, remote))
+        cwd = os.getcwd()
+        try:
+            os.chdir(self.path)
+            os.system("git pull %s %s" % (remote, branch))
+        finally:
+            os.chdir(cwd)
+
+    def make_path(self, *path):
+        return os.path.join(self.path, *path)
 
     def __enter__(self):
         """ Activated when used in the with statement. 
             Should automatically acquire a lock to be used in the with block.
         """
-        self.clone_repo()
+        self.clone()
+        self.pull()
         return self
  
     def __exit__(self, type, value, traceback):
@@ -38,12 +45,13 @@ class GitRepo(object):
         pass
 
 def parse_args():
-    parser = optparse.OptionParser("setup.py [options] <personal|work>")
+    parser = optparse.OptionParser("setup.py [options] <personal|work> " 
+                                   "<user>")
     parser.add_option("-u", "--user",
                       action="store_true", dest="add_user", default=False,
                       help="add user to system")
     parser.add_option("-g", "--gitconfig",
-                      action="store_true", dest="add_git_config", default=False,
+                      action="store_true", dest="add_gitconfig", default=False,
                       help="add git config for user")
     parser.add_option("-v", "--vimrc",
                       action="store_true", dest="add_vimrc", default=False,
@@ -59,13 +67,13 @@ def parse_args():
                       help="reverse specified operaions")
 
     options, args = parser.parse_args()
-    if len(args) < 1:
+    if len(args) < 2:
         parser.print_usage()
         sys.exit(1)
     return options, args
 
 def make_user_path(path):
-    return os.path.join(os.path.expanduser("~%s" % user), path)
+    return os.path.join(os.path.expanduser("~%s" % the_user), path)
 
 def backup(path, backup_path, move=False):
     _backup_restore(path, backup_path, 'backing up', move=move)
@@ -106,19 +114,32 @@ def symlink(src, dest):
         finally:
             os.chdir(cwd)
 
-def add_vimrc(git_repo, undo=False):
-    dest = make_user_path('.vimrc')
-    bak = make_user_path('.vimrc.bak')
+def add_dotfile(git_repo, src_name, dest_name, undo=False):
+    dest = make_user_path(dest_name)
+    bak = make_user_path("%s.bak" % dest_name)
     if undo:
         restore(bak, dest)
     else:
         backup(dest, bak, move=True)
-        src = git_repo.make_path('.vimrc')
+        src = git_repo.make_path('dotfiles', src_name) 
         symlink(src, dest)
 
+def add_vimrc(git_repo, undo=False):
+    return add_dotfile(git_repo, '.vimrc', '.vimrc', undo=options.undo)
+
+def add_gitconfig(git_repo, undo=False):
+    dst_name = '.gitconfig'
+    src_name = '%s-%s' % (dst_name, mode)
+    return add_dotfile(git_repo, src_name, dst_name, undo=options.undo)
+
 options, args = None, None
+the_user = mode = None
 if __name__ == "__main__":
     options, args = parse_args()
-    with GitRepo(git_uri) as git_repo:
+    mode, the_user = args
+    with GitRepo(GIT_URI) as git_repo:
         if options.add_vimrc:
             add_vimrc(git_repo, undo=options.undo)
+        if options.add_gitconfig:
+            add_gitconfig(git_repo, undo=options.undo)
+
