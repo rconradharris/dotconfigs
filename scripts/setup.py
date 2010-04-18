@@ -9,10 +9,13 @@ logging.basicConfig(level=logging.DEBUG)
 
 GIT_URI = "git://github.com/rconradharris/dotconfigs.git"
 class GitRepo(object):
-    def __init__(self, uri, os_flavor):
+    def __init__(self, uri, os_flavor, dest_path=None, hide_repo=False):
+        dest_path = dest_path or os.getcwd()
         self.uri = uri
-        self.basename = os.path.basename(self.uri)
-        self.path = os.path.join(os.path.abspath(os.getcwd()), self.basename)
+        self.name = os.path.basename(self.uri)
+        if hide_repo:
+            self.name = ".%s" % self.name
+        self.path = os.path.join(os.path.expanduser(dest_path), self.name)
         self.os_flavor = os_flavor
 
     def install(self, pkg="git-core"):
@@ -27,7 +30,7 @@ class GitRepo(object):
 
     def clone(self):
         logging.debug("cloning git repo '%s'" % self.uri)
-        os.system("git clone %s %s" % (self.uri, self.basename))
+        os.system("git clone %s %s" % (self.uri, self.path))
 
     def pull(self, remote='origin', branch='master'):
         logging.debug("pulling branch '%s' from '%s'" % (branch, remote))
@@ -159,7 +162,8 @@ the_user = mode = None
 if __name__ == "__main__":
     options, args = parse_args()
     mode, the_user = args
-    with GitRepo(GIT_URI, os_flavor=options.os_flavor) as git_repo:
+    with GitRepo(GIT_URI, os_flavor=options.os_flavor,
+                 dest_path="~%s" % the_user, hide_repo=True) as git_repo:
         if options.quick_start:
             quick_start(git_repo, undo=options)
         else:
